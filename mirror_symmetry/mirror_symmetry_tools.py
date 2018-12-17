@@ -3,7 +3,6 @@ from subprocess import call
 
 import numpy as np
 import nibabel as nib
-# from nipype.interfaces import niftyreg
 
 
 def main(img_path, save_path=None, flip_direction=0, create_mask=None,
@@ -18,6 +17,8 @@ def main(img_path, save_path=None, flip_direction=0, create_mask=None,
 
     if save_path is None:
         save_path = os.getcwd()
+    elif save_path.startswith('.'):
+        save_path = os.getcwd() + save_path[1:]
 
     if create_mask:
         save_nii(symmetry_mask.astype(int), img_affine,
@@ -70,7 +71,8 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     mirror_normal[0, flip_direction] = 1
 
     # mirroring matrix (S_v)
-    mat_Sv = np.eye(3) - 2*np.matmul(np.transpose(mirror_normal), mirror_normal)
+    mat_Sv = np.eye(3) - 2*np.matmul(np.transpose(mirror_normal),
+                                     mirror_normal)
 
     mat_R = transformation_matrix[0:3, 0:3]
     t = transformation_matrix[0:3, 3]
@@ -87,7 +89,7 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
 
     # force the component of the normal which corresponds to the symmetry
     # direction to be positive
-    if symmetry_normal[0, flip_direction] < 0:
+    if symmetry_normal[flip_direction, 0] < 0:
         symmetry_normal = -symmetry_normal
 
     d = np.dot(mirror_centre, np.transpose(mirror_normal))

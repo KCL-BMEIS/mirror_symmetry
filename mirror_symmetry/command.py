@@ -1,23 +1,45 @@
-from argparse import ArgumentParser
+import argparse as ap
+import os
 from .mirror_symmetry_tools import main
 
 
+class ReadableDir(ap.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        r_dir = values
+
+        if not os.path.exists(r_dir):
+            try:
+                os.makedirs(r_dir)
+            except os.error:
+                raise ap.ArgumentTypeError(
+                        'ReadableDir:Could not create dir: {0}'.format(r_dir))
+        if not os.path.isdir(r_dir):
+            raise ap.ArgumentTypeError(
+                    'ReadableDir:{0} is not a valid path'.format(r_dir))
+        if os.access(r_dir, os.R_OK):
+            setattr(namespace, self.dest, r_dir)
+        else:
+            raise ap.ArgumentTypeError(
+                    'ReadableDir:{0} is not a readable dir'.format(r_dir))
+
+
 def process():
-    parser = ArgumentParser(description='Detect mirror symmetry plane. The '
-                                        'symmetry plane determined in '
-                                        'point-normal form is printed. '
-                                        'Optional binary mask that splits '
-                                        'the image into the two symmetric '
-                                        'regions can be saved. Optional '
-                                        'two symmetric images can be created '
-                                        'by mirroring the sides across the '
-                                        'symmetry plane.')
+    parser = ap.ArgumentParser(description='Detect mirror symmetry plane. The '
+                                           'symmetry plane determined in '
+                                           'point-normal form is printed. '
+                                           'Optional binary mask that splits '
+                                           'the image into the two symmetric '
+                                           'regions can be saved. Optional '
+                                           'two symmetric images can be '
+                                           'created by mirroring the sides '
+                                           'across the symmetry plane.')
 
     parser.add_argument('image',
-                        help='Nifti image to be processed')
-    parser.add_argument('--save_path', '-p', default=None,
-                        help='path to folder in which files are saved.')
-    parser.add_argument('--flip_direction', '-d', default=0,
+                        help='Nifti image to be processed.')
+    parser.add_argument('--save_path', '-p', default=None, action=ReadableDir,
+                        help='Path to folder in which files are saved. '
+                             'Folder will be created if it does not exist.')
+    parser.add_argument('--flip_direction', '-d', default=0, type=int,
                         help='The index of the axis used as flipping '
                              'direction while initialising the registration '
                              'based symmetry detection. Useful to be close '
