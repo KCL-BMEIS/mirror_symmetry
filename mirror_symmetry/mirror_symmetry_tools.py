@@ -21,7 +21,7 @@ def main(img_path, save_path=None, flip_direction=0, create_mask=None,
         save_path = os.getcwd() + save_path[1:]
 
     if create_mask:
-        save_nii(symmetry_mask.astype(int), img_affine,
+        save_nii(symmetry_mask.astype(np.uint8), img_affine,
                  os.path.join(save_path, 'symmetry_mask'))
     if mirror_image:
         save_nii(mirror_images[0], img_affine, os.path.join(save_path,
