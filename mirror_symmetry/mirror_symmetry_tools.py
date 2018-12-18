@@ -5,14 +5,14 @@ import numpy as np
 import nibabel as nib
 
 
-def main(img_path, save_path=None, flip_direction=0, create_mask=None,
+def main(img_path, save_path=None, direction='R', create_mask=None,
          mirror_image=None):
     img_nii = nib.load(img_path)
     img_data = img_nii.get_fdata()
     img_affine = img_nii.get_qform()
 
     symmetry_plane, symmetry_mask, mirror_images = \
-        get_mirror_symmetry_plane(img_data, img_affine, flip_direction,
+        get_mirror_symmetry_plane(img_data, img_affine, direction,
                                   create_mask, mirror_image)
 
     if save_path is None:
@@ -38,7 +38,7 @@ def main(img_path, save_path=None, flip_direction=0, create_mask=None,
 
 
 def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
-                                           flip_direction=0):
+                                           flip_axis=0):
     """
     Compute the mirror symmetry plane of an image volume based on an affine
     transformation matrix. The symmetry plane normal is determined by
@@ -53,9 +53,10 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     img_shape: Shape of the image.
     transformation_matrix: 4x4 affine transformation matrix describing the
         registration of an image volume to its mirrored volume that was
-        flipped in flip_direction.
-    flip_direction: Determines the flipping direction used to create the
-        mirrored image that is used for the registration.
+        flipped in flip_axis.
+    flip_axis: Determines the flipping axis used to create the mirrored
+        image that is used for the registration. Sign indicates in which
+        direction the symmetry_normal will point.
 
     Returns
     -------
@@ -65,10 +66,8 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     mirror_centre = np.round(img_shape / 2.0)
     mirror_centre = mirror_centre.astype(int)
 
-    # TODO: derive left-right axis from header info
-    # TODO: change mirror-axis parameter, e.g. LR, AP, SI
     mirror_normal = np.zeros([1, 3])
-    mirror_normal[0, flip_direction] = 1
+    mirror_normal[0, np.abs(flip_axis)] = 1
 
     # mirroring matrix (S_v)
     mat_Sv = np.eye(3) - 2*np.matmul(np.transpose(mirror_normal),
@@ -88,8 +87,11 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     symmetry_normal = eigen_vectors[:, symmetry_idx]
 
     # force the component of the normal which corresponds to the symmetry
-    # direction to be positive
-    if symmetry_normal[flip_direction, 0] < 0:
+    # direction to be positive (avoids, random orientation)
+    if symmetry_normal[np.abs(flip_axis), 0] < 0:
+        symmetry_normal = -symmetry_normal
+    # consider sign of flip direction to orient normal correctly
+    if flip_axis < 0:
         symmetry_normal = -symmetry_normal
 
     d = np.dot(mirror_centre, np.transpose(mirror_normal))
@@ -115,7 +117,49 @@ def mat2vec(mat):
     return np.squeeze(np.array(mat))
 
 
-def get_mirror_symmetry_plane(img, affine, flip_direction=0,
+def get_axis_from_direction(affine, direction='R'):
+    """
+    Determine image axis corresponding to a given world direction.
+
+    Parameters
+    ----------
+    affine: Affine matrix determining the world coordinates of the volume.
+    direction: Direction in world terms (left, right, anterior,
+        posterior, superior, inferior) specified by the first letter, e.g. 'R'.
+
+    Returns
+    -------
+    The image axis that corresponds to the given direction. The sign
+    determines if the direction points from low to high values (+) or from
+    high to low values (-).
+    """
+    if direction.upper() == 'A':
+        dir_set = ['A', 'P']
+    elif direction.upper() == 'S':
+        dir_set = ['S', 'I']
+    elif direction.upper() == 'L':
+        dir_set = ['L', 'R']
+    elif direction.upper() == 'P':
+        dir_set = ['P', 'A']
+    elif direction.upper() == 'I':
+        dir_set = ['I', 'S']
+    else:
+        dir_set = ['R', 'L']
+
+    orientations = np.array(nib.orientations.aff2axcodes(affine))
+
+    axis = np.squeeze(np.argwhere([o in dir_set for o in orientations]))
+    dir_idx = np.argwhere(orientations[axis] in dir_set)
+
+    if dir_idx == 0:
+        flip_direction = axis
+    else:
+        flip_direction = -axis
+
+    return flip_direction
+
+
+def get_mirror_symmetry_plane(img, affine, direction='R',
                               create_mask=None, mirror_images=False):
     """
     Compute mirror symmetry plane of an image volume based on image
@@ -132,24 +176,35 @@ def get_mirror_symmetry_plane(img, affine, flip_direction=0,
     ----------
     img: Image volume (numpy ndarray).
     affine: Affine matrix determining the world coordinates of the volume.
-    flip_direction: Determines the flipping direction used to create the
-        mirrored image that is used for the registration.
+    direction: The direction of expected symmetry, e.g. when an image has a
+        symmetry close to the left-right direction, either "left"/"l" or
+        "right"/"r" can be specified. If the mask is saved, the value 1 will
+        correspond to the direction specified here. Expected values: left,
+        right, anterior, posterior, superior, inferior and the corresponding
+        first letters.
+    create_mask: Flag to indicate whether a binary mask separating the image
+        along the symmetry plane should be created.
+    mirror_images: Flag to indicate whether two images created by mirroring one
+        side across the symmetry plane should be created.
 
     Returns
     -------
+    A list of following three values:
     A dictionary containing the normal of the symmetry plane ('normal') and
     a point on the plane ('point') in voxel coordinates.
+    A binary mask separating the image along the symmetry plane.
+    A list of two images mirrored along the symmetry plane.
     """
     img_size = np.array(np.shape(img))
-    # flip image in specified direction (if mirror direction is close to
-    # symmetry plane it makes registration easier)
-    img_mirrored = np.flip(img, flip_direction)
+    flip_axis = get_axis_from_direction(affine, direction)
+
+    img_mirrored = np.flip(img, np.abs(flip_axis))
 
     warped_mirrored, _, affine_mat = register_nifty(img, img_mirrored, affine)
 
     point, normal = get_symmetry_plane_from_transformation(img_size,
                                                            affine_mat,
-                                                           flip_direction)
+                                                           flip_axis)
     symmetry_mask = None
     mirrored_1 = None
     mirrored_2 = None
@@ -167,7 +222,7 @@ def get_mirror_symmetry_plane(img, affine, flip_direction=0,
                                                                mirrored_2]
 
 
-def create_symmetry_mask(img, affine, flip_direction=0):
+def create_symmetry_mask(img, affine, direction='R'):
     """
     Create a binary mask splitting the image into the two (most) mirror
     symmetric regions. The symmetry plane is detected using a registration
@@ -177,18 +232,17 @@ def create_symmetry_mask(img, affine, flip_direction=0):
     ----------
     img: The 3D image volume (ndarray).
     affine: Affine matrix determining the world coordinates of the image.
-    flip_direction: Determines the flipping direction used to create a
+    direction: Determines the flipping direction used to create a
         mirrored image that is used for the registration.
 
     Returns
     -------
     The binary symmetry mask of the same size as the input image.
     """
-    # TODO: derive from header information which label is which side (l/r)
     img_size = np.array(np.shape(img))
 
     symmetry_plane, _, _ = get_mirror_symmetry_plane(img, affine,
-                                                     flip_direction)
+                                                     direction)
     symmetry_mask = create_masks_from_plane(symmetry_plane['point'],
                                             symmetry_plane['normal'], img_size)
     return symmetry_mask
