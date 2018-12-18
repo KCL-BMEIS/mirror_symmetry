@@ -133,18 +133,21 @@ def get_axis_from_direction(affine, direction='R'):
     determines if the direction points from low to high values (+) or from
     high to low values (-).
     """
-    if direction.upper() == 'A':
-        dir_set = ['A', 'P']
-    elif direction.upper() == 'S':
-        dir_set = ['S', 'I']
+    if direction.upper() == 'R':
+        dir_set = ['R', 'L']
     elif direction.upper() == 'L':
         dir_set = ['L', 'R']
+    elif direction.upper() == 'A':
+        dir_set = ['A', 'P']
     elif direction.upper() == 'P':
         dir_set = ['P', 'A']
+    elif direction.upper() == 'S':
+        dir_set = ['S', 'I']
     elif direction.upper() == 'I':
         dir_set = ['I', 'S']
     else:
         dir_set = ['R', 'L']
+        print('Direction specified not in [R, L, A, P, S, I], R used instead.')
 
     orientations = np.array(nib.orientations.aff2axcodes(affine))
 
