@@ -30,18 +30,27 @@ def main(img_path, save_path=None, direction='R', create_mask=None,
         save_nii(mirror_images[1], img_affine, os.path.join(save_path,
                                                             'mirror_image_2'))
 
+    print(symmetry_plane['dist'])
+    print(symmetry_plane['normal'])
+    print(symmetry_plane['point'])
+
+    img_affine_2 = np.copy(img_affine)
+    img_affine_2[0:3, 3] = 0
+    normal_world = mat2vec(voxel2world(symmetry_plane['normal'], img_affine_2))
     point_world = mat2vec(voxel2world(symmetry_plane['point'], img_affine))
-    normal_world = mat2vec(voxel2world(symmetry_plane['normal'], img_affine))
 
     np.set_printoptions(precision=2)
-    print('The detected symmetry plane is defined by the the following point '
-          'normal pair\n'
+    print('The detected symmetry plane is described by the following '
+          'information: Point on the plane, normal and distance to the '
+          'origin (Hessian normal form).\n'
           'In voxel coordinates:\n'
-          'point: ' + str(symmetry_plane['point']) + ',\n'
-          'normal: ' + str(symmetry_plane['normal']) + ',\n'
+          'point:    ' + str(symmetry_plane['point']) + ',\n'
+          'normal:   ' + str(symmetry_plane['normal']) + ',\n'
+          'distance: ' + str(symmetry_plane['dist']) + '.\n'
           'In world coordinates:\n'
-          'point: ' + str(point_world) + ',\n'
-          'normal: ' + str(normal_world))
+          'point:    ' + str(point_world) + ',\n'
+          'normal:   ' + str(normal_world) + ',\n'
+          'distance: ' + str(symmetry_plane['dist']) + '.')
     return
 
 
@@ -68,6 +77,24 @@ def voxel2world(coord, affine):
                                np.ones(np.shape(coord)[0])))
     in_world = np.dot(affine, np.transpose(stacked))
     return np.transpose(in_world[:3, :])
+
+
+def project_point_on_plane(plane_normal, plane_point, point):
+    """
+    Project a point onto a plane given by the normal and a point.
+    q = p - <(p-o),n> * n
+
+    Parameters
+    ----------
+    plane_normal: Normal vector of the plane.
+    plane_point: Point on the plane.
+    point: Arbitrary point that is to be projected onto the plane.
+
+    Returns
+    -------
+    Coordinates of the point projected onto the plane.
+    """
+    return point - np.dot((point - plane_point), plane_normal) * plane_normal
 
 
 def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
@@ -131,7 +158,15 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
 
     symmetry_point = 0.5 * (np.dot(mat_R, 2*d*np.transpose(mirror_normal))
                             + np.transpose(np.matrix(t)))
-    return mat2vec(symmetry_point), mat2vec(symmetry_normal)
+    symmetry_point = mat2vec(symmetry_point)
+    symmetry_normal = mat2vec(symmetry_normal)
+
+    centre_on_plane = project_point_on_plane(symmetry_normal, symmetry_point,
+                                             mirror_centre)
+    # Hessian normal form: n x = -p
+    hnf_normal = symmetry_normal/np.linalg.norm(symmetry_normal)
+    hnf_dist = - np.dot(hnf_normal, symmetry_point)
+    return hnf_normal, hnf_dist, centre_on_plane
 
 
 def mat2vec(mat):
@@ -238,15 +273,15 @@ def get_mirror_symmetry_plane(img, affine, direction='R',
 
     warped_mirrored, _, affine_mat = register_nifty(img, img_mirrored, affine)
 
-    point, normal = get_symmetry_plane_from_transformation(img_size,
-                                                           affine_mat,
-                                                           flip_axis)
+    normal, dist, point = get_symmetry_plane_from_transformation(img_size,
+                                                                 affine_mat,
+                                                                 flip_axis)
     symmetry_mask = None
     mirrored_1 = None
     mirrored_2 = None
 
     if create_mask or mirror_images:
-        symmetry_mask = create_masks_from_plane(point, normal, img_size)
+        symmetry_mask = create_masks_from_plane(normal, dist, img_size)
         symmetry_mask = symmetry_mask.astype(bool)
     if mirror_images:
         mirrored_1 = np.copy(img)
@@ -254,8 +289,8 @@ def get_mirror_symmetry_plane(img, affine, direction='R',
         mirrored_1[symmetry_mask] = warped_mirrored[symmetry_mask]
         inv_mask = np.logical_not(symmetry_mask)
         mirrored_2[inv_mask] = warped_mirrored[inv_mask]
-    return {'normal': normal, 'point': point}, symmetry_mask, [mirrored_1,
-                                                               mirrored_2]
+    return {'normal': normal, 'dist': dist, 'point': point}, \
+        symmetry_mask, [mirrored_1, mirrored_2]
 
 
 def create_symmetry_mask(img, affine, direction='R'):
@@ -279,12 +314,12 @@ def create_symmetry_mask(img, affine, direction='R'):
 
     symmetry_plane, _, _ = get_mirror_symmetry_plane(img, affine,
                                                      direction)
-    symmetry_mask = create_masks_from_plane(symmetry_plane['point'],
-                                            symmetry_plane['normal'], img_size)
+    symmetry_mask = create_masks_from_plane(symmetry_plane['normal'],
+                                            symmetry_plane['dist'], img_size)
     return symmetry_mask
 
 
-def create_masks_from_plane(point, normal, shape):
+def create_masks_from_plane(normal, dist, shape):
     """
     Create a binary mask of given size based on a plane defined by its
     normal and a point on the plane (in voxel coordinates).
@@ -308,13 +343,14 @@ def create_masks_from_plane(point, normal, shape):
                                 grid_y.ravel(order='F'),
                                 grid_z.ravel(order='F')))
 
-    distance_from_plane = np.dot((position - np.transpose(point)), normal)
+    # distance_from_plane = np.dot((position - np.transpose(point)), normal)
+    distance_from_plane = np.dot(position, normal) + dist
     distance_vol = np.array(distance_from_plane).reshape((shape[0],
                                                           shape[1],
                                                           shape[2]),
                                                          order='F')
 
-    binary_mask = np.empty(distance_vol.shape, dtype=np.float32)
+    binary_mask = np.empty(distance_vol.shape, dtype=np.uint8)
     binary_mask[:, :, :] = distance_vol[:, :, :] >= 0
     return binary_mask
 
