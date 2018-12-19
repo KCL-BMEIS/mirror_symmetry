@@ -1,4 +1,5 @@
 import os
+from tempfile import TemporaryDirectory
 from subprocess import call
 
 import numpy as np
@@ -304,22 +305,27 @@ def register_nifty(ref, flo, affine):
     """
     # TODO: consider using simpleITK for a registration that is easier
     # TODO: available and has less overhead than this NiftyReg hack
-    save_nii(ref, affine, '_tmp_ref.nii.gz')
-    save_nii(flo, affine, '_tmp_flo.nii.gz')
 
-    cmd_string = 'reg_aladin -ref _tmp_ref.nii.gz -flo _tmp_flo.nii.gz'
-    cmd_string += ' -rigOnly -res _tmp_warped.nii.gz -voff'
-    cmd_string += ' -aff _tmp_affine_matrix.txt'
+    with TemporaryDirectory(prefix='tmp_mirror_symmetry_', dir=os.getcwd()) \
+            as tmp_dir:
+        save_nii(ref, affine, os.path.join(tmp_dir, '_tmp_ref.nii.gz'))
+        save_nii(flo, affine, os.path.join(tmp_dir, '_tmp_flo.nii.gz'))
 
-    call(cmd_string.split(' '))
-    warped_nii = nib.load('_tmp_warped.nii.gz')
-    warped_img = warped_nii.get_fdata()
-    warped_affine = warped_nii.affine
+        cmd_string = 'reg_aladin'
+        cmd_string += ' -ref ' + os.path.join(tmp_dir, '_tmp_ref.nii.gz')
+        cmd_string += ' -flo ' + os.path.join(tmp_dir, '_tmp_flo.nii.gz')
+        cmd_string += ' -res ' + os.path.join(tmp_dir, '_tmp_warped.nii.gz')
+        cmd_string += ' -aff ' + os.path.join(tmp_dir, '_tmp_affine_matrix.txt')
+        cmd_string += ' -rigOnly -voff'
+        call(cmd_string.split(' '))
 
-    with open('_tmp_affine_matrix.txt', 'r') as file:
-        rigid_mat = [[float(num) for num in line.split(' ')] for line in file]
+        warped_nii = nib.load(os.path.join(tmp_dir, '_tmp_warped.nii.gz'))
+        warped_img = warped_nii.get_fdata()
+        warped_affine = warped_nii.affine
 
-    delete_files('_tmp_')
+        with open(os.path.join(tmp_dir, '_tmp_affine_matrix.txt'), 'r') as aff:
+            rigid_mat = [[float(num) for num in line.split(' ')]
+                         for line in aff]
 
     rigid_voxel = transformation_world2voxel(rigid_mat, affine)
 
@@ -343,24 +349,6 @@ def transformation_world2voxel(transformation, affine):
     """
     trans_voxel = np.dot(np.linalg.inv(affine), np.dot(transformation, affine))
     return np.linalg.inv(trans_voxel)
-
-
-def delete_files(prefix='_tmp_', path=None):
-    """
-    Convenience function to delete files with given prefix from a folder.
-
-    Parameters
-    ----------
-    prefix: Common prefix for the files to be deleted.
-    path: Path to a folder that is searched for files with the given prefix.
-
-    """
-    if path is None:
-        path = os.getcwd()
-    for file in os.listdir(path):
-        if file.startswith(prefix):
-            os.remove(file)
-    return
 
 
 def save_nii(img, affine, path):
