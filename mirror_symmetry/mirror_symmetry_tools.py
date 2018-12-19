@@ -30,12 +30,44 @@ def main(img_path, save_path=None, direction='R', create_mask=None,
         save_nii(mirror_images[1], img_affine, os.path.join(save_path,
                                                             'mirror_image_2'))
 
+    point_world = mat2vec(voxel2world(symmetry_plane['point'], img_affine))
+    normal_world = mat2vec(voxel2world(symmetry_plane['normal'], img_affine))
+
     np.set_printoptions(precision=2)
     print('The detected symmetry plane is defined by the the following point '
-          'normal pair (in voxel coordinates):\n'
+          'normal pair\n'
+          'In voxel coordinates:\n'
           'point: ' + str(symmetry_plane['point']) + ',\n'
-          'normal: ' + str(symmetry_plane['normal']))
+          'normal: ' + str(symmetry_plane['normal']) + ',\n'
+          'In world coordinates:\n'
+          'point: ' + str(point_world) + ',\n'
+          'normal: ' + str(normal_world))
     return
+
+
+def voxel2world(coord, affine):
+    """
+    Convert voxel coordinates into world coordinates.
+
+    Parameters
+    ----------
+    coord: Coordinates of a single point as an array/list, or multiple
+        points as a list of arrays/lists, or as a matrix with one point per
+        row.
+    affine: Affine matrix determining the world coordinates.
+
+    Returns
+    -------
+
+    Matrix of world coordinates with one point per row.
+    """
+    coord = np.matrix(coord)
+    stacked = np.column_stack((coord[:, 0],
+                               coord[:, 1],
+                               coord[:, 2],
+                               np.ones(np.shape(coord)[0])))
+    in_world = np.dot(affine, np.transpose(stacked))
+    return np.transpose(in_world[:3, :])
 
 
 def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
