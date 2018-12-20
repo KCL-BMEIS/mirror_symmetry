@@ -1,4 +1,5 @@
 import os
+from math import copysign
 from tempfile import TemporaryDirectory
 from subprocess import call
 
@@ -22,17 +23,45 @@ def main(img_path, save_path=None, direction='R', create_mask=None,
         save_path = os.getcwd() + save_path[1:]
 
     if create_mask:
-        save_nii(symmetry_mask.astype(np.uint8), img_affine,
-                 os.path.join(save_path, 'symmetry_mask'))
+        if direction.upper() == 'R':
+            mask_path = os.path.join(save_path, 'right_symmetry_mask')
+        elif direction.upper() == 'L':
+            mask_path = os.path.join(save_path, 'left_symmetry_mask')
+        elif direction.upper() == 'A':
+            mask_path = os.path.join(save_path, 'anterior_symmetry_mask')
+        elif direction.upper() == 'P':
+            mask_path = os.path.join(save_path, 'posterior_symmetry_mask')
+        elif direction.upper() == 'S':
+            mask_path = os.path.join(save_path, 'superior_symmetry_mask')
+        elif direction.upper() == 'I':
+            mask_path = os.path.join(save_path, 'inferior_symmetry_mask')
+        else:
+            mask_path = os.path.join(save_path, 'symmetry_mask')
+        save_nii(symmetry_mask.astype(np.uint8), img_affine, mask_path)
     if mirror_image:
-        save_nii(mirror_images[0], img_affine, os.path.join(save_path,
-                                                            'mirror_image_1'))
-        save_nii(mirror_images[1], img_affine, os.path.join(save_path,
-                                                            'mirror_image_2'))
-
-    print(symmetry_plane['dist'])
-    print(symmetry_plane['normal'])
-    print(symmetry_plane['point'])
+        if direction.upper() == 'R':
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_left')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_right')
+        elif direction.upper() == 'L':
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_right')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_left')
+        elif direction.upper() == 'A':
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_posterior')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_anterior')
+        elif direction.upper() == 'P':
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_anterior')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_posterior')
+        elif direction.upper() == 'S':
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_inferior')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_superior')
+        elif direction.upper() == 'I':
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_superior')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_inferior')
+        else:
+            mirror_path_1 = os.path.join(save_path, 'mirror_image_1')
+            mirror_path_2 = os.path.join(save_path, 'mirror_image_2')
+        save_nii(mirror_images[0], img_affine, mirror_path_1)
+        save_nii(mirror_images[1], img_affine, mirror_path_2)
 
     img_affine_2 = np.copy(img_affine)
     img_affine_2[0:3, 3] = 0
@@ -42,7 +71,7 @@ def main(img_path, save_path=None, direction='R', create_mask=None,
     np.set_printoptions(precision=2)
     print('The detected symmetry plane is described by the following '
           'information: Point on the plane, normal and distance to the '
-          'origin (Hessian normal form).\n'
+          'origin (Hessian normal form: n x = -d).\n'
           'In voxel coordinates:\n'
           'point:    ' + str(symmetry_plane['point']) + ',\n'
           'normal:   ' + str(symmetry_plane['normal']) + ',\n'
@@ -98,7 +127,7 @@ def project_point_on_plane(plane_normal, plane_point, point):
 
 
 def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
-                                           flip_axis=0):
+                                           flip_axis=1):
     """
     Compute the mirror symmetry plane of an image volume based on an affine
     transformation matrix. The symmetry plane normal is determined by
@@ -127,7 +156,7 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     mirror_centre = mirror_centre.astype(int)
 
     mirror_normal = np.zeros([1, 3])
-    mirror_normal[0, np.abs(flip_axis)] = 1
+    mirror_normal[0, np.abs(flip_axis) - 1] = 1
 
     # mirroring matrix (S_v)
     mat_Sv = np.eye(3) - 2*np.matmul(np.transpose(mirror_normal),
@@ -147,11 +176,9 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     symmetry_normal = eigen_vectors[:, symmetry_idx]
 
     # force the component of the normal which corresponds to the symmetry
-    # direction to be positive (avoids, random orientation)
-    if symmetry_normal[np.abs(flip_axis), 0] < 0:
-        symmetry_normal = -symmetry_normal
-    # consider sign of flip direction to orient normal correctly
-    if flip_axis < 0:
+    # direction to point in the direction of the sign of flip_axis
+    if copysign(1, symmetry_normal[np.abs(flip_axis)-1]) \
+            != copysign(1, flip_axis):
         symmetry_normal = -symmetry_normal
 
     d = np.dot(mirror_centre, np.transpose(mirror_normal))
@@ -197,35 +224,27 @@ def get_axis_from_direction(affine, direction='R'):
 
     Returns
     -------
-    The image axis that corresponds to the given direction. The sign
-    determines if the direction points from low to high values (+) or from
-    high to low values (-).
+    The image axis that corresponds to the given direction [-3,-2,-1,1,2,3].
+    The sign determines if the direction points from low to high values (+)
+    or from high to low values (-).
     """
-    if direction.upper() == 'R':
+    if direction.upper() == 'R' or direction.upper() == 'L':
         dir_set = ['R', 'L']
-    elif direction.upper() == 'L':
-        dir_set = ['L', 'R']
-    elif direction.upper() == 'A':
+    elif direction.upper() == 'A' or direction.upper() == 'P':
         dir_set = ['A', 'P']
-    elif direction.upper() == 'P':
-        dir_set = ['P', 'A']
-    elif direction.upper() == 'S':
+    elif direction.upper() == 'S' or direction.upper() == 'I':
         dir_set = ['S', 'I']
-    elif direction.upper() == 'I':
-        dir_set = ['I', 'S']
     else:
         dir_set = ['R', 'L']
         print('Direction specified not in [R, L, A, P, S, I], R used instead.')
 
     orientations = np.array(nib.orientations.aff2axcodes(affine))
-
     axis = np.squeeze(np.argwhere([o in dir_set for o in orientations]))
-    dir_idx = np.argwhere(orientations[axis] in dir_set)
 
-    if dir_idx == 0:
-        flip_direction = axis
+    if direction.upper() == orientations[axis]:
+        flip_direction = axis+1
     else:
-        flip_direction = -axis
+        flip_direction = -(axis+1)
 
     return flip_direction
 
@@ -269,7 +288,7 @@ def get_mirror_symmetry_plane(img, affine, direction='R',
     img_size = np.array(np.shape(img))
     flip_axis = get_axis_from_direction(affine, direction)
 
-    img_mirrored = np.flip(img, np.abs(flip_axis))
+    img_mirrored = np.flip(img, np.abs(flip_axis)-1)
 
     warped_mirrored, _, affine_mat = register_nifty(img, img_mirrored, affine)
 
@@ -326,7 +345,7 @@ def create_masks_from_plane(normal, dist, shape):
 
     Parameters
     ----------
-    point: Point on the plane (in voxel coordinates).
+    dist: Distance of the plane to the origin (in voxel coordinates).
     normal: Normal of the plane (in voxel coordinates).
     shape: Shape of the mask that will be created.
 
@@ -371,8 +390,10 @@ def register_nifty(ref, flo, affine):
     warped_affine:
     rigid_voxel:
     """
-    # TODO: consider using simpleITK for a registration that is easier
-    # TODO: available and has less overhead than this NiftyReg hack
+    # TODO: consider using simpleITK for a registration that is available as
+    # pip install. Also NiftyReg is limited in capture range of rotation
+    # which can be a problem detecting symmetry planes that are far from the
+    # image axes.
 
     with TemporaryDirectory(prefix='tmp_mirror_symmetry_', dir=os.getcwd()) \
             as tmp_dir:
@@ -383,15 +404,18 @@ def register_nifty(ref, flo, affine):
         cmd_string += ' -ref ' + os.path.join(tmp_dir, '_tmp_ref.nii.gz')
         cmd_string += ' -flo ' + os.path.join(tmp_dir, '_tmp_flo.nii.gz')
         cmd_string += ' -res ' + os.path.join(tmp_dir, '_tmp_warped.nii.gz')
-        cmd_string += ' -aff ' + os.path.join(tmp_dir, '_tmp_affine_matrix.txt')
-        cmd_string += ' -rigOnly -voff'
+        cmd_string += ' -aff ' + os.path.join(tmp_dir, '_tmp_aff_matrix.txt')
+        cmd_string += ' -rigOnly -comi -voff'
+        cmd_string += ' -ln 4 -lp 3'
         call(cmd_string.split(' '))
+
+        # input('wait a sec...')
 
         warped_nii = nib.load(os.path.join(tmp_dir, '_tmp_warped.nii.gz'))
         warped_img = warped_nii.get_fdata()
         warped_affine = warped_nii.affine
 
-        with open(os.path.join(tmp_dir, '_tmp_affine_matrix.txt'), 'r') as aff:
+        with open(os.path.join(tmp_dir, '_tmp_aff_matrix.txt'), 'r') as aff:
             rigid_mat = [[float(num) for num in line.split(' ')]
                          for line in aff]
 

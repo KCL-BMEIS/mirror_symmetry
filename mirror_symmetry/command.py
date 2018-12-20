@@ -47,7 +47,8 @@ def process():
                              'saved, the value 1 will correspond to the '
                              'direction specified here. Expected values: '
                              'left, right, anterior, posterior, superior, '
-                             'inferior and the corresponding first letters.')
+                             'inferior and the corresponding first letters, '
+                             'either lower case or upper case.')
 
     parser.add_argument('--create_mask', '-c', action='store_true',
                         help='Set this flag to save a binary symmetry mask.')
