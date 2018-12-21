@@ -8,14 +8,14 @@ import nibabel as nib
 
 
 def main(img_path, save_path=None, direction='R', create_mask=None,
-         mirror_image=None):
+         mirror_image=None, use_cuda=False):
     img_nii = nib.load(img_path)
     img_data = img_nii.get_fdata()
     img_affine = img_nii.get_qform()
 
     symmetry_plane, symmetry_mask, mirror_images = \
         get_mirror_symmetry_plane(img_data, img_affine, direction,
-                                  create_mask, mirror_image)
+                                  create_mask, mirror_image, use_cuda=use_cuda)
 
     if save_path is None:
         save_path = os.getcwd()
@@ -250,7 +250,8 @@ def get_axis_from_direction(affine, direction='R'):
 
 
 def get_mirror_symmetry_plane(img, affine, direction='R',
-                              create_mask=None, mirror_images=False):
+                              create_mask=None, mirror_images=False,
+                              use_cuda=False):
     """
     Compute mirror symmetry plane of an image volume based on image
     registration following the strategy of Cicconet et al. (2017):
@@ -290,7 +291,10 @@ def get_mirror_symmetry_plane(img, affine, direction='R',
 
     img_mirrored = np.flip(img, np.abs(flip_axis)-1)
 
-    warped_mirrored, _, affine_mat = register_nifty(img, img_mirrored, affine)
+    warped_mirrored, _, affine_mat = register_nifty(img,
+                                                    img_mirrored,
+                                                    affine,
+                                                    use_cuda=use_cuda)
 
     normal, dist, point = get_symmetry_plane_from_transformation(img_size,
                                                                  affine_mat,
@@ -312,7 +316,7 @@ def get_mirror_symmetry_plane(img, affine, direction='R',
         symmetry_mask, [mirrored_1, mirrored_2]
 
 
-def create_symmetry_mask(img, affine, direction='R'):
+def create_symmetry_mask(img, affine, direction='R', use_cuda=False):
     """
     Create a binary mask splitting the image into the two (most) mirror
     symmetric regions. The symmetry plane is detected using a registration
@@ -332,7 +336,8 @@ def create_symmetry_mask(img, affine, direction='R'):
     img_size = np.array(np.shape(img))
 
     symmetry_plane, _, _ = get_mirror_symmetry_plane(img, affine,
-                                                     direction)
+                                                     direction,
+                                                     use_cuda=use_cuda)
     symmetry_mask = create_masks_from_plane(symmetry_plane['normal'],
                                             symmetry_plane['dist'], img_size)
     return symmetry_mask
@@ -374,7 +379,7 @@ def create_masks_from_plane(normal, dist, shape):
     return binary_mask
 
 
-def register_nifty(ref, flo, affine):
+def register_nifty(ref, flo, affine, use_cuda=False):
     """
     Register two 3D image volumes using NifyReg.
 
@@ -407,6 +412,8 @@ def register_nifty(ref, flo, affine):
         cmd_string += ' -aff ' + os.path.join(tmp_dir, '_tmp_aff_matrix.txt')
         cmd_string += ' -rigOnly -comi -voff'
         cmd_string += ' -ln 4 -lp 3'
+        if use_cuda:
+            cmd_string += ' -platf 1'
         call(cmd_string.split(' '))
 
         # input('wait a sec...')
