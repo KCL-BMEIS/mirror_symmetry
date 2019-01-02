@@ -55,10 +55,12 @@ def process():
     parser.add_argument('--mirror_image', '-m', action='store_true',
                         help='Set this flag to save two images created by '
                              'mirroring one side across the symmetry plane.')
+    parser.add_argument('--gpu', '-g', action='store_true',
+                        help='Use CUDA for the registration.')
     arguments = parser.parse_args()
 
     main(arguments.image, arguments.save_path, arguments.direction[0],
-         arguments.create_mask, arguments.mirror_image)
+         arguments.create_mask, arguments.mirror_image, use_cuda=arguments.gpu)
 
 
 if __name__ == "__main__":
