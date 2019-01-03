@@ -5,21 +5,21 @@ registration using the NiftyReg tool reg_aladin.
 
 ![screenshot](screenshots/slicer.png)
 
-Visualisation in 3D Slicer (4.9.0) of a T1 weighted MRI of the head (bottom 
-left) and the two images created by mirroring one side across the detected 
-symmetry plane. 
+Visualisation of a T1 weighted MRI of the head (bottom left) and the two 
+images created by mirroring one side across the detected symmetry plane in 
+3D Slicer (4.9.0).
 The top image consists of the mirrored left side of the head, and the bottom
 right image consists of the mirrored right side. All images have the mask 
 indicating the right side of the head as an overlay as well as the fiducial 
 markers of a point on the symmetry plane (N0) and points along the normal 
-direction starting from that point (N5, N25, N50).
+direction starting from N0 (N5, N25, N50).
 
 ## Installation
 
 ### NiftyReg
 
-This package uses the NiftyReg package for it's registration component, 
-so first make sure to [install NiftyReg](https://github.com/KCL-BMEIS/niftyreg/wiki/install).
+This package uses the NiftyReg package for its registration component, so 
+first make sure to [install NiftyReg](https://github.com/KCL-BMEIS/niftyreg/wiki/install).
 
 
 ### `mirror_symmetry` package
