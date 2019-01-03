@@ -3,16 +3,21 @@
 Detect the plane of mirror symmetry of a 3D nifti image based on rigid 
 registration using the NiftyReg tool reg_aladin.
 
-![screenshot](screenshots/slicer.png)
+![screenshot](screenshots/slicer_vertebra.png)
 
-Visualisation of a T1 weighted MRI of the head (bottom left) and the two 
-images created by mirroring one side across the detected symmetry plane in 
+Visualisation of a CT image cropped to a lumbar vertebra (bottom left) and the 
+two images created by mirroring one side across the detected symmetry plane in 
 3D Slicer (4.9.0).
-The top image consists of the mirrored left side of the head, and the bottom
-right image consists of the mirrored right side. All images have the mask 
-indicating the right side of the head as an overlay as well as the fiducial 
-markers of a point on the symmetry plane (N0) and points along the normal 
-direction starting from N0 (N5, N25, N50).
+The top image consists of the mirrored left side of the vertebra, and the 
+bottom right image consists of the mirrored right side. All images have the 
+mask indicating the right side of the head as an overlay as well as the 
+fiducial markers of a point on the symmetry plane (N0) and points along the 
+normal direction starting from N0 (N5, N25, N50).
+
+
+![screenshot](screenshots/slicer_brain.png)
+
+Corresponding images of a T1 weighted post resection head MRI.
 
 ## Installation
 
@@ -81,7 +86,8 @@ optional arguments:
 
 ```
 $ mirror_symmetry_tool t1.nii.gz --mirror_image --create_mask -p ./t1 -d R -f
-The detected symmetry plane is described by the following information: Point on the plane, normal and distance to the origin (Hessian normal form: n x = -d).
+The detected symmetry plane is described by the following information: Point on
+the plane, normal and distance to the origin (Hessian normal form: n x = -d).
 In voxel coordinates:
 point:    [ 127.99  127.97   87.10],
 normal:   [   0.01    0.03    1.00],
