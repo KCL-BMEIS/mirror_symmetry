@@ -8,7 +8,7 @@ import nibabel as nib
 
 
 def main(img_path, save_path=None, direction='R', create_mask=None,
-         mirror_image=None, use_cuda=False):
+         mirror_image=None, create_fiducials=False, use_cuda=False):
     img_nii = nib.load(img_path)
     img_data = img_nii.get_fdata()
     img_affine = img_nii.get_qform()
@@ -24,17 +24,17 @@ def main(img_path, save_path=None, direction='R', create_mask=None,
 
     if create_mask:
         if direction.upper() == 'R':
-            mask_path = os.path.join(save_path, 'right_symmetry_mask')
+            mask_path = os.path.join(save_path, 'symmetry_mask_right')
         elif direction.upper() == 'L':
-            mask_path = os.path.join(save_path, 'left_symmetry_mask')
+            mask_path = os.path.join(save_path, 'symmetry_mask_left')
         elif direction.upper() == 'A':
-            mask_path = os.path.join(save_path, 'anterior_symmetry_mask')
+            mask_path = os.path.join(save_path, 'symmetry_mask_anterior')
         elif direction.upper() == 'P':
-            mask_path = os.path.join(save_path, 'posterior_symmetry_mask')
+            mask_path = os.path.join(save_path, 'symmetry_mask_posterior')
         elif direction.upper() == 'S':
-            mask_path = os.path.join(save_path, 'superior_symmetry_mask')
+            mask_path = os.path.join(save_path, 'symmetry_mask_superior')
         elif direction.upper() == 'I':
-            mask_path = os.path.join(save_path, 'inferior_symmetry_mask')
+            mask_path = os.path.join(save_path, 'symmetry_mask_inferior')
         else:
             mask_path = os.path.join(save_path, 'symmetry_mask')
         save_nii(symmetry_mask.astype(np.uint8), img_affine, mask_path)
@@ -68,18 +68,29 @@ def main(img_path, save_path=None, direction='R', create_mask=None,
     normal_world = mat2vec(voxel2world(symmetry_plane['normal'], img_affine_2))
     point_world = mat2vec(voxel2world(symmetry_plane['point'], img_affine))
 
-    np.set_printoptions(precision=2)
-    print('The detected symmetry plane is described by the following '
-          'information: Point on the plane, normal and distance to the '
-          'origin (Hessian normal form: n x = -d).\n'
-          'In voxel coordinates:\n'
-          'point:    ' + str(symmetry_plane['point']) + ',\n'
-          'normal:   ' + str(symmetry_plane['normal']) + ',\n'
-          'distance: ' + str(symmetry_plane['dist']) + '.\n'
-          'In world coordinates:\n'
-          'point:    ' + str(point_world) + ',\n'
-          'normal:   ' + str(normal_world) + ',\n'
-          'distance: ' + str(symmetry_plane['dist']) + '.')
+    with np.printoptions(formatter={'all': '{:7.2f}'.format}):
+        print('The detected symmetry plane is described by the following '
+              'information: Point on the plane, normal and distance to the '
+              'origin (Hessian normal form: n x = -d).\n'
+              'In voxel coordinates:\n'
+              'point:    ' + str(symmetry_plane['point']) + ',\n'
+              'normal:   ' + str(symmetry_plane['normal']) + ',\n'
+              'distance: ' + str(symmetry_plane['dist']) + '.\n'
+              'In world coordinates:\n'
+              'point:    ' + str(point_world) + ',\n'
+              'normal:   ' + str(normal_world) + '.')
+
+    if create_fiducials:
+        csv_path = os.path.join(save_path, 'symmetry_plane_normal.fcsv')
+        with open(csv_path, 'w') as centres_csv:
+            centres_csv.write('# Markups fiducial file version = 4.9\n' +
+                              '# CoordinateSystem = 0\n' +
+                              '# columns = id,x,y,z,ow,ox,oy,oz,vis,sel,' +
+                              'lock,label,desc,associatedNodeID\n')
+        add_fiducial_to_csv(csv_path, point_world, 'N0')
+        add_fiducial_to_csv(csv_path, point_world + 5*normal_world, 'N5')
+        add_fiducial_to_csv(csv_path, point_world + 25*normal_world, 'N25')
+        add_fiducial_to_csv(csv_path, point_world + 50*normal_world, 'N50')
     return
 
 
@@ -159,13 +170,13 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
     mirror_normal[0, np.abs(flip_axis) - 1] = 1
 
     # mirroring matrix (S_v)
-    mat_Sv = np.eye(3) - 2*np.matmul(np.transpose(mirror_normal),
+    mat_sv = np.eye(3) - 2*np.matmul(np.transpose(mirror_normal),
                                      mirror_normal)
 
-    mat_R = transformation_matrix[0:3, 0:3]
+    mat_r = transformation_matrix[0:3, 0:3]
     t = transformation_matrix[0:3, 3]
 
-    mat = np.dot(mat_Sv, np.transpose(mat_R))
+    mat = np.dot(mat_sv, np.transpose(mat_r))
     mat = np.asmatrix(mat)
 
     eigen_values, eigen_vectors = np.linalg.eigh(mat)
@@ -183,7 +194,7 @@ def get_symmetry_plane_from_transformation(img_shape, transformation_matrix,
 
     d = np.dot(mirror_centre, np.transpose(mirror_normal))
 
-    symmetry_point = 0.5 * (np.dot(mat_R, 2*d*np.transpose(mirror_normal))
+    symmetry_point = 0.5 * (np.dot(mat_r, 2*d*np.transpose(mirror_normal))
                             + np.transpose(np.matrix(t)))
     symmetry_point = mat2vec(symmetry_point)
     symmetry_normal = mat2vec(symmetry_normal)
@@ -206,7 +217,6 @@ def mat2vec(mat):
 
     Returns
     -------
-
     A numpy array containing the data of the input matrix.
     """
     return np.squeeze(np.array(mat))
@@ -277,6 +287,7 @@ def get_mirror_symmetry_plane(img, affine, direction='R',
         along the symmetry plane should be created.
     mirror_images: Flag to indicate whether two images created by mirroring one
         side across the symmetry plane should be created.
+    use_cuda: Flag to indicate cuda use for GPU support of the registration.
 
     Returns
     -------
@@ -328,6 +339,7 @@ def create_symmetry_mask(img, affine, direction='R', use_cuda=False):
     affine: Affine matrix determining the world coordinates of the image.
     direction: Determines the flipping direction used to create a
         mirrored image that is used for the registration.
+    use_cuda: Flag to indicate cuda use for GPU support of the registration.
 
     Returns
     -------
@@ -388,12 +400,13 @@ def register_nifty(ref, flo, affine, use_cuda=False):
     ref: Reference/ fixed image.
     flo: Floating/ moving image.
     affine: Affine matrix determining the world coordinates of the image.
+    use_cuda: Flag to indicate cuda use for GPU support of the registration.
 
     Returns
     -------
-    warped_img:
-    warped_affine:
-    rigid_voxel:
+    warped_img: Warped floating image.
+    warped_affine: Affine matrix of the warped floating image.
+    rigid_voxel: Rigid transformation of the registration in voxel coordinates.
     """
     # TODO: consider using simpleITK for a registration that is available as
     # pip install. Also NiftyReg is limited in capture range of rotation
@@ -489,3 +502,14 @@ def enforce_file_extension(file, extension):
     if (len(split_str) != 2) or (split_str[-1] != extension[1:]):
         file = split_str[0] + extension
     return file
+
+
+def add_fiducial_to_csv(file_path, coordinate, name):
+    with open(file_path, 'a') as file:
+        file.write('vtkMRMLMarkupsFiducialNode_0,' +
+                   str(coordinate[0]) + ',' +
+                   str(coordinate[1]) + ',' +
+                   str(coordinate[2]) + ',' +
+                   '0.000,0.000,0.000,1.000,1,1,0,' +
+                   name + ',,\n')
+    return

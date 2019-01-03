@@ -36,9 +36,11 @@ def process():
 
     parser.add_argument('image',
                         help='Nifti image to be processed.')
+
     parser.add_argument('--save_path', '-p', default=None, action=ReadableDir,
                         help='Path to folder in which files are saved. '
                              'Folder will be created if it does not exist.')
+
     parser.add_argument('--direction', '-d', default='R',
                         help='The direction of expected symmetry, e.g. when '
                              'an image has a symmetry close to the '
@@ -50,17 +52,24 @@ def process():
                              'inferior and the corresponding first letters, '
                              'either lower case or upper case.')
 
-    parser.add_argument('--create_mask', '-c', action='store_true',
-                        help='Set this flag to save a binary symmetry mask.')
-    parser.add_argument('--mirror_image', '-m', action='store_true',
-                        help='Set this flag to save two images created by '
-                             'mirroring one side across the symmetry plane.')
-    parser.add_argument('--gpu', '-g', action='store_true',
-                        help='Use CUDA for the registration.')
-    arguments = parser.parse_args()
+    parser.add_argument('--create_fiducials', '-f', action='store_true',
+                        help='Flag to save a slicer compatible csv file '
+                             'containing fiducials visualising the normal '
+                             'vector of the symmetry plane.')
 
-    main(arguments.image, arguments.save_path, arguments.direction[0],
-         arguments.create_mask, arguments.mirror_image, use_cuda=arguments.gpu)
+    parser.add_argument('--create_mask', '-c', action='store_true',
+                        help='Flag to save a binary symmetry mask.')
+
+    parser.add_argument('--mirror_image', '-m', action='store_true',
+                        help='Flag to save two images created by mirroring '
+                             'one side across the symmetry plane.')
+
+    parser.add_argument('--gpu', '-g', action='store_true',
+                        help='Flag to use CUDA for the registration.')
+    args = parser.parse_args()
+
+    main(args.image, args.save_path, args.direction[0], args.create_mask,
+         args.mirror_image, args.create_fiducials, use_cuda=args.gpu)
 
 
 if __name__ == "__main__":
