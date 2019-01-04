@@ -1,7 +1,12 @@
 # mirror_symmetry
 
-Detect the plane of mirror symmetry of a 3D nifti image based on rigid 
-registration using the NiftyReg tool reg_aladin.
+Detect the plane of mirror symmetry of a 3D NIFTI image based on rigid 
+registration using the [NiftyReg](https://github.com/KCL-BMEIS/niftyreg/) 
+tool reg_aladin.
+
+This package is based on the method suggested by Cicconet et al. [_Finding 
+Mirror Symmetry via Registration and Optimal Symmetric Pairwise Assignment 
+of Curves._ IEEE ICCV, Detecting Symmetry in the Wild Workshop, 2017.](http://openaccess.thecvf.com/content_ICCV_2017_workshops/papers/w24/Cicconet_Finding_Mirror_Symmetry_ICCV_2017_paper.pdf)
 
 ![screenshot](screenshots/slicer_vertebra.png)
 
