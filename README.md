@@ -37,7 +37,7 @@ first make sure to [install NiftyReg](https://github.com/KCL-BMEIS/niftyreg/wiki
 Using [conda](https://conda.io/docs/) environments is recommended:
 
 ```shell
-$ conda create -n "mirror_sym" -y
+$ conda create -n "mirror_sym" python -y
 $ conda activate mirror_sym
 (mirror_sym) $ pip install git+git://github.com/KCL-BMEIS/mirror_symmetry
 ```
