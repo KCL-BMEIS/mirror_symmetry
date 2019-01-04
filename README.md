@@ -39,8 +39,7 @@ Using [conda](https://conda.io/docs/) environments is recommended:
 ```shell
 $ conda create -n "mirror_sym" -y
 $ conda activate mirror_sym
-(mirror_sym) $ git clone "https://github.com/KCL-BMEIS/mirror_symmetry" --depth 1
-(mirror_sym) $ pip install "./mirror_symmetry"
+(mirror_sym) $ pip install git+git://github.com/KCL-BMEIS/mirror_symmetry
 ```
 
 
