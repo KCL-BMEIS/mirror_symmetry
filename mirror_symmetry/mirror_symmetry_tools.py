@@ -7,8 +7,8 @@ import numpy as np
 import nibabel as nib
 
 
-def main(img_path, save_path=None, direction='R', create_mask=None,
-         mirror_image=None, create_fiducials=False, use_cuda=False):
+def main(img_path, save_path=None, direction='R', create_mask=False,
+         mirror_image=False, create_fiducials=False, use_cuda=False):
     img_nii = nib.load(img_path)
     img_data = img_nii.get_fdata()
     img_affine = img_nii.get_qform()
@@ -260,7 +260,7 @@ def get_axis_from_direction(affine, direction='R'):
 
 
 def get_mirror_symmetry_plane(img, affine, direction='R',
-                              create_mask=None, mirror_images=False,
+                              create_mask=False, mirror_images=False,
                               use_cuda=False):
     """
     Compute mirror symmetry plane of an image volume based on image

@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='mirror_symmetry',
-      version='1.1.2',
+      version='1.1.3',
       description='Tools to detect mirror symmetry in 3D image data.',
       long_description=readme(),
       classifiers=[
